@@ -877,22 +877,27 @@ class Story(BaseModel):
     def get_tags(cls, incoming_tags: list | dict) -> list[NewsItemTag]:
         return list(NewsItemTag.parse_tags(incoming_tags).values())
 
-    def set_tags(self, incoming_tags: list | dict) -> tuple[dict, int]:
+    def set_tags(self, incoming_tags: list | dict, bot_type: str | None = None) -> tuple[dict, int]:
         try:
-            return self._update_tags(incoming_tags)
+            if bot_type:
+                self.attributes.append(NewsItemAttribute(key=bot_type, value=f"{len(incoming_tags)}"))
+            return self._update_tags(incoming_tags, bot_type=bot_type)
         except Exception as e:
             logger.exception("Update News Item Tags Failed")
             db.session.rollback()
             return {"error": str(e)}, 500
 
-    def _update_tags(self, incoming_tags: list | dict) -> tuple[dict, int]:
+    def _update_tags(self, incoming_tags: list | dict, bot_type: str | None = None) -> tuple[dict, int]:
         parsed_tags = NewsItemTag.parse_tags(incoming_tags)
         if not parsed_tags:
             return {"error": "No valid tags provided"}, 400
 
-        tags_to_remove = self.get_tags_to_remove(parsed_tags)
-        self.patch_tags(parsed_tags)
-        self.remove_tags(tags_to_remove)
+        if bot_type:
+            self.patch_tags(parsed_tags)
+        else:
+            tags_to_remove = self.get_tags_to_remove(parsed_tags)
+            self.patch_tags(parsed_tags)
+            self.remove_tags(tags_to_remove)
 
         db.session.commit()
         return {"message": f"Successfully updated story: {self.id}, with {len(self.tags)} new tags"}, 200
